@@ -3525,33 +3525,6 @@ impl VaultRegistry {
             &resource_id,
             &payer,
             amount,
-            state: PaymentState::Escrowed,
-            tx_hash,
-            recorded_at: env.ledger().sequence(),
-            ledger: env.ledger().sequence(),
-        };
-
-        env.storage().persistent().set(&receipt_key, &receipt);
-        Self::bump_persistent(&env, &receipt_key);
-
-        let recipient_key = DataKey::PaymentRecipient(receipt_id.clone());
-        env.storage()
-            .persistent()
-            .set(&recipient_key, &resource.creator);
-        Self::bump_persistent(&env, &recipient_key);
-
-        // Secondary indexes: `(resource_id, payer)` -> most recent receipt id
-        // (for `get_payment_receipt`), and `tx_hash` -> receipt id (enforces
-        // one receipt per Stellar settlement transaction).
-        let index_key = DataKey::PaymentIndex(resource_id, payer);
-        env.storage().persistent().set(&index_key, &receipt_id);
-        Self::bump_persistent(&env, &index_key);
-
-        env.storage().persistent().set(&tx_hash_key, &receipt_id);
-        Self::bump_persistent(&env, &tx_hash_key);
-
-        env.events()
-            .publish((symbol_short!("payment"), receipt_id), receipt);
             &tx_hash,
         )?;
         Self::write_payment(&env, receipt_id, resource_id, payer, amount, tx_hash)?;
@@ -4992,6 +4965,14 @@ impl VaultRegistry {
 
         env.storage().persistent().set(&receipt_key, &receipt);
         Self::bump_persistent(env, &receipt_key);
+
+        // Pin the creator at payment time as the refund recipient, so a later
+        // ownership transfer does not change who may approve a refund.
+        let recipient_key = DataKey::PaymentRecipient(receipt_id.clone());
+        env.storage()
+            .persistent()
+            .set(&recipient_key, &resource.creator);
+        Self::bump_persistent(env, &recipient_key);
 
         // Secondary indexes: `(resource_id, payer)` -> most recent receipt id
         // (for `get_payment_receipt`), and `tx_hash` -> receipt id (enforces
