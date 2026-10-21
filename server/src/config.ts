@@ -5,6 +5,7 @@ import {
   resolveStellarNetwork,
   validateNetworkConfig,
 } from "@zentrixpay/registry-client";
+import { envBoolean } from "./lib/envBoolean.js";
 import { rootLogger } from "./lib/logger.js";
 
 const envWithDefaults = applyNetworkEnvDefaults(process.env);
@@ -84,7 +85,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().url().optional(),
 
   // Optional HMAC-SHA256 request signatures for publisher mutations (off by default).
-  REQUIRE_REQUEST_SIGNATURE: z.coerce.boolean().default(false),
+  REQUIRE_REQUEST_SIGNATURE: envBoolean(false),
   // Max clock skew for X-Timestamp when signatures are required (default 5 minutes).
   SIGNATURE_MAX_SKEW_MS: z.coerce.number().default(300_000),
 
@@ -131,10 +132,7 @@ const envSchema = z.object({
     .positive()
     .default(256 * 1024),
   // Local development only: allow upstreams on loopback/private networks.
-  PROXY_ALLOW_PRIVATE_UPSTREAMS: z
-    .enum(["true", "false"])
-    .default("false")
-    .transform((v) => v === "true"),
+  PROXY_ALLOW_PRIVATE_UPSTREAMS: envBoolean(false),
   // How long a proxied API's row is cached between DB lookups (#34). Edits
   // invalidate the entry, so this only bounds staleness across replicas.
   PROXY_API_CACHE_TTL_MS: z.coerce.number().int().min(0).default(5_000),
