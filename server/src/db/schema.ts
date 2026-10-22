@@ -176,6 +176,13 @@ export const apis = pgTable(
     publisherIdx: index("idx_apis_publisher_id").on(table.publisherId),
     catalogIdx: index("idx_apis_listed_created_at").on(table.listed, table.createdAt),
     tagsIdx: index("idx_apis_tags").using("gin", table.tags),
+    // Catalog substring search (`?q=`, ILIKE '%term%') on name and description;
+    // without these it is a full table scan (#148, see docs/performance.md).
+    nameTrgmIdx: index("idx_apis_name_trgm").using("gin", table.name.op("gin_trgm_ops")),
+    descriptionTrgmIdx: index("idx_apis_description_trgm").using(
+      "gin",
+      table.description.op("gin_trgm_ops"),
+    ),
   }),
 );
 
@@ -198,6 +205,13 @@ export const apiCalls = pgTable(
     durationMs: integer("duration_ms").notNull(),
     // Settlement transaction, from the x402 PAYMENT-RESPONSE header; null when not charged.
     txHash: text("tx_hash"),
+    // Provider-initiated refund: "pending" while the USDC transfer back to the
+    // payer is being submitted, "refunded" once it confirmed. (Restored: these
+    // columns were lost in a merge but still exist in migration 0010.)
+    refundStatus: text("refund_status").$type<"pending" | "refunded">(),
+    refundAmount: text("refund_amount"),
+    refundTxHash: text("refund_tx_hash"),
+    refundedAt: timestamp("refunded_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => ({

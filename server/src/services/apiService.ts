@@ -1,12 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { apiCalls, apis } from "../db/schema.js";
 import { config } from "../config.js";
 import { encryptSecret } from "../utils/secretBox.js";
 import { validateUpstreamUrl } from "../lib/upstreamGuard.js";
 import { sendUpstream } from "../lib/upstreamClient.js";
-import type { apiCatalogSortValues } from "../schemas/requests.js";
+import { selectCatalogPage, type ApiCatalogOptions } from "./apiCatalogQuery.js";
 
 export type ApiRow = typeof apis.$inferSelect;
 
@@ -249,53 +249,11 @@ export async function getOwnedApi(
   return api;
 }
 
-export type ApiCatalogSort = (typeof apiCatalogSortValues)[number];
-
-export interface ApiCatalogOptions {
-  q?: string;
-  tag?: string[];
-  sort?: ApiCatalogSort;
-  limit: number;
-  offset: number;
-}
-
-/** Window used to rank APIs by popularity (charged calls). */
-export const POPULARITY_WINDOW_DAYS = 7;
+export type { ApiCatalogOptions, ApiCatalogSort } from "./apiCatalogQuery.js";
+export { POPULARITY_WINDOW_DAYS } from "./apiCatalogQuery.js";
 
 export async function listPublicApis(opts: ApiCatalogOptions) {
-  const conditions = [eq(apis.listed, true), isNull(apis.archivedAt)];
-  if (opts.q) {
-    const pattern = `%${opts.q.replace(/[%_\\]/g, "\\$&")}%`;
-    conditions.push(or(ilike(apis.name, pattern), ilike(apis.description, pattern))!);
-  }
-  if (opts.tag?.length) {
-    // jsonb containment: the API's tags must include every requested tag.
-    conditions.push(sql`${apis.tags} @> ${JSON.stringify(opts.tag)}::jsonb`);
-  }
-
-  // Charged calls in the popularity window; correlated so it only runs for this sort.
-  const recentChargedCalls = sql`(
-    select count(*) from ${apiCalls}
-    where ${apiCalls.apiId} = ${apis.id}
-      and ${apiCalls.charged}
-      and ${apiCalls.createdAt} >= now() - make_interval(days => ${POPULARITY_WINDOW_DAYS})
-  )`;
-  const price = sql`${apis.price}::numeric`;
-  const order = {
-    newest: [desc(apis.createdAt)],
-    price_asc: [asc(price), desc(apis.createdAt)],
-    price_desc: [desc(price), desc(apis.createdAt)],
-    popular: [desc(recentChargedCalls), desc(apis.createdAt)],
-  }[opts.sort ?? "newest"];
-
-  const rows = await db
-    .select()
-    .from(apis)
-    .where(and(...conditions))
-    // id breaks ties so offset pagination is stable.
-    .orderBy(...order, asc(apis.id))
-    .limit(opts.limit)
-    .offset(opts.offset);
+  const rows = await selectCatalogPage(db, opts);
   return rows.map(toPublicApi);
 }
 
@@ -304,7 +262,7 @@ export async function listPublisherApis(publisherId: string) {
     .select()
     .from(apis)
     .where(and(eq(apis.publisherId, publisherId), isNull(apis.archivedAt)))
-    .orderBy(desc(apis.createdAt));
+    .orderBy(desc(apis.createdAt), asc(apis.id));
   return rows.map(toOwnerApi);
 }
 
