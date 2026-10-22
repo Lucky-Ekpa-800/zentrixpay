@@ -1,13 +1,6 @@
-import "dotenv/config";
-import { z } from "zod/v4";
-import {
-  applyNetworkEnvDefaults,
-  resolveStellarNetwork,
-  validateNetworkConfig,
-} from "@zentrixpay/registry-client";
-import { rootLogger } from "./lib/logger.js";
+import dotenv from 'dotenv';
 
-const envWithDefaults = applyNetworkEnvDefaults(process.env);
+dotenv.config();
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
@@ -175,24 +168,18 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-const stellarNetwork = resolveStellarNetwork(parsed.data.STELLAR_NETWORK);
-const networkIssues = validateNetworkConfig({
-  stellarNetwork,
-  x402Network: parsed.data.NETWORK,
-  sorobanRpcUrl: parsed.data.SOROBAN_RPC_URL,
-  usdcSacContractId: parsed.data.USDC_CONTRACT_ID,
-  registryContractId: parsed.data.VAULT_REGISTRY_CONTRACT_ID,
-});
+function optional(name: string, fallback: string): string {
+  return process.env[name] ?? fallback;
+}
 
-if (networkIssues.length > 0) {
-  rootLogger.error(
-    { event: "config_network_mismatch", issues: networkIssues },
-    "inconsistent Stellar network configuration",
-  );
-  for (const issue of networkIssues) {
-    rootLogger.error({ field: issue.field }, issue.message);
+function optionalInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isNaN(parsed)) {
+    throw new Error(`Environment variable ${name} must be an integer`);
   }
-  process.exit(1);
+  return parsed;
 }
 
 // ── Mainnet safety guard (#51) ────────────────────────────────────────────────
