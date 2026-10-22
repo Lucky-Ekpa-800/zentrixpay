@@ -56,6 +56,7 @@ import {
   type StoredProxyResponse,
 } from "../lib/idempotency.js";
 import { decryptSecret } from "../utils/secretBox.js";
+import { minimizeCallPath } from "../lib/callPath.js";
 import { getLogger } from "../lib/logger.js";
 import { config } from "../config.js";
 
@@ -528,8 +529,10 @@ async function proxyHandler(req: Request, res: Response) {
       charged,
       txHash: charged ? (settlement.transaction ?? null) : null,
       method: req.method,
-      path:
+      // Stored minimized: identifiers and the query string are dropped (#144).
+      path: minimizeCallPath(
         target.pathname.slice(new URL(api.upstreamUrl).pathname.replace(/\/+$/, "").length) || "/",
+      ),
       responseStatus: res.statusCode,
       durationMs: Date.now() - started,
     };

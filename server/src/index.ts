@@ -14,6 +14,10 @@ import { startPoolMetrics, stopPoolMetrics } from "./db/client.js";
 import { startRetryPendingWorker, stopRetryPendingWorker } from "./workers/retryPendingWorker.js";
 import { startEventListener, stopEventListener } from "./workers/eventListener.js";
 import { startHealthCheckWorker, stopHealthCheckWorker } from "./workers/healthCheckWorker.js";
+import {
+  startApiCallRetentionWorker,
+  stopApiCallRetentionWorker,
+} from "./workers/apiCallRetentionWorker.js";
 import { closeRateLimitStore } from "./lib/rateLimit/index.js";
 
 initSentry();
@@ -34,6 +38,7 @@ const server: Server = app.listen(config.PORT, () => {
   startRetryPendingWorker();
   startEventListener();
   startHealthCheckWorker();
+  startApiCallRetentionWorker();
   startPoolMetrics();
 });
 
@@ -46,6 +51,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
   stopRetryPendingWorker();
   stopEventListener();
   stopHealthCheckWorker();
+  stopApiCallRetentionWorker();
   stopPoolMetrics();
 
   // Stop passing readiness checks so load balancers drain us before we close.
